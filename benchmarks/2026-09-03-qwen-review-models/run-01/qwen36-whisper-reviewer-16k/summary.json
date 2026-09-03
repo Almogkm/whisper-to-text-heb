@@ -1,0 +1,30 @@
+{
+  "model": "qwen36-whisper-reviewer-16k",
+  "cases": [
+    {
+      "id": "whatsapp_2026_08_28_medium",
+      "required_edits": 10,
+      "remaining_edits": 6,
+      "correction_accuracy": 0.4,
+      "word_accuracy_to_gold": 0.9423076923076923,
+      "notes": "Judged gold keeps the uncertain name 'מוג' conservative and scores only clear lexical and grammar repairs.",
+      "prediction_path": "/home/almogked/Projects/whisper/benchmarks/2026-09-03-qwen-review-models/run-01/qwen36-whisper-reviewer-16k/whatsapp_2026_08_28_medium.txt"
+    },
+    {
+      "id": "whatsapp_2026_09_03_medium",
+      "required_edits": 2,
+      "remaining_edits": 2,
+      "correction_accuracy": 0.0,
+      "word_accuracy_to_gold": 0.9230769230769231,
+      "notes": "Proper names stay conservative; the judged corrections target agreement, punctuation, and obvious Hebrew normalization.",
+      "prediction_path": "/home/almogked/Projects/whisper/benchmarks/2026-09-03-qwen-review-models/run-01/qwen36-whisper-reviewer-16k/whatsapp_2026_09_03_medium.txt"
+    }
+  ],
+  "aggregate": {
+    "required_edits": 12,
+    "remaining_edits": 8,
+    "correction_accuracy": 0.33333333333333337,
+    "word_accuracy_to_gold": 0.9384615384615385,
+    "gold_word_count": 130
+  }
+}

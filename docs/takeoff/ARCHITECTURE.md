@@ -22,6 +22,7 @@ CLI
 | `src/whisper_md_transcriber/__main__.py` | Package launcher | Lets the package run as a module |
 | `src/whisper_md_transcriber/cli.py` | Main runtime module | Currently owns argument parsing, orchestration, stage prompts, Ollama calls, and Markdown rendering |
 | `ollama/DictaHebrewCleaner.Modelfile` | DICTA wrapper | Pins the Hebrew cleanup alias and its stop-token behavior |
+| `ollama/Qwen36WhisperReviewer16k.Modelfile` | Review wrapper | Pins the project-specific Qwen reviewer alias for second-pass transcript reconciliation |
 
 ## Execution flow
 

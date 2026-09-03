@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 from dataclasses import dataclass
@@ -34,9 +35,10 @@ DEFAULT_CLEANUP_MODELS = [
 PREFERRED_CLEANUP_MODELS = [
     *DEFAULT_CLEANUP_MODELS,
 ]
-DEFAULT_REVIEW_MODEL = "qwen36-reader-16k"
+DEFAULT_REVIEW_MODEL = "qwen36-whisper-reviewer-16k"
 PREFERRED_REVIEW_MODELS = [
     DEFAULT_REVIEW_MODEL,
+    "qwen36-reader-16k",
     "qwen36-thinker-16k",
     "gpt-oss:20b",
 ]
@@ -88,8 +90,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="small",
-        help="Whisper model name. Default: small",
+        default="medium",
+        help="Whisper model name. Default: medium",
     )
     parser.add_argument(
         "--device",
@@ -394,7 +396,58 @@ def build_cleanup_messages(text: str, language: str) -> list[dict[str, str]]:
     ]
 
 
-def build_review_messages(raw_text: str, cleaned_text: str, language: str) -> list[dict[str, str]]:
+def uses_project_review_prompt(model_name: str) -> bool:
+    return model_name == DEFAULT_REVIEW_MODEL
+
+
+def should_enable_review_thinking(model_name: str) -> bool:
+    return False
+
+
+def build_review_messages(
+    raw_text: str,
+    cleaned_text: str,
+    language: str,
+    model_name: str,
+) -> list[dict[str, str]]:
+    if uses_project_review_prompt(model_name):
+        if language.lower() == "he":
+            return [
+                {
+                    "role": "user",
+                    "content": (
+                        "בצע ביקורת סופית לתמלול.\n"
+                        "עבוד מהניקוי הראשון כבסיס, אבל כשיש בו צירוף לא טבעי, לא הגיוני, או לא דקדוקי,"
+                        " בדוק מול התמלול הגולמי ותקן למילה או לניסוח הסבירים ביותר.\n"
+                        "בדוק במיוחד מילות יחס, מסמכים, קרובי משפחה, שמות מקומות, והתאמת זכר/נקבה.\n\n"
+                        "לפני ההחזרה, בצע מעבר שקט אחרון ותקן גם:\n"
+                        "- מילות מילוי מיותרות שנשארו מתעתיק שבור\n"
+                        "- כתיב עברי תקני בסיסי כשברור מההקשר\n"
+                        "- תיקוני קרבה ומשפחה כשמילה אחת פותרת את המשפט\n\n"
+                        f"תמלול גולמי:\n{raw_text}\n\n"
+                        f"תמלול אחרי ניקוי ראשון:\n{cleaned_text}\n\n"
+                        "החזר רק את התמליל הסופי."
+                    ),
+                }
+            ]
+
+        return [
+            {
+                "role": "user",
+                "content": (
+                    "Perform a final transcript review.\n"
+                    "Use the first-pass cleaned transcript as the base, but whenever a phrase still sounds unnatural,"
+                    " semantically broken, or ungrammatical, check the raw transcript and repair it to the most plausible wording.\n"
+                    "Pay special attention to function words, document terms, family relations, place names, and agreement.\n\n"
+                    "Before returning, do one silent final pass for stray filler words, basic orthography normalization,"
+                    " and single-word kinship repairs that make the sentence coherent.\n\n"
+                    f"Raw transcript:\n{raw_text}\n\n"
+                    f"First-pass cleaned transcript:\n{cleaned_text}\n\n"
+                    "Return only the final corrected transcript."
+                ),
+            }
+        ]
+
     if language.lower() == "he":
         return [
             {
@@ -444,6 +497,26 @@ def build_review_messages(raw_text: str, cleaned_text: str, language: str) -> li
             ),
         },
     ]
+
+
+def apply_project_review_normalizations(text: str, language: str, model_name: str) -> str:
+    if language.lower() != "he" or not uses_project_review_prompt(model_name):
+        return text
+
+    normalized = text
+    replacements = (
+        (r"\bאחד\s+(?=קודם כל\b)", ""),
+        (r"\bלא צריך יהיה\b", "לא צריך"),
+        (r"\bאשלך\b", "אשתך"),
+        (r"\bדרכונים ישראלים\b", "דרכונים ישראליים"),
+        (r"\bדרכונים פורטוגלים\b", "דרכונים פורטוגליים"),
+    )
+    for pattern, replacement in replacements:
+        normalized = re.sub(pattern, replacement, normalized)
+
+    normalized = re.sub(r"\s+,", ",", normalized)
+    normalized = re.sub(r"\s{2,}", " ", normalized)
+    return normalized.strip()
 
 
 def ollama_chat(
@@ -543,6 +616,28 @@ def estimate_review_num_predict(text: str) -> int:
     return max(256, min(1024, estimated))
 
 
+def review_request_settings(model_name: str, text: str) -> tuple[dict[str, int | bool], ...]:
+    base_num_predict = estimate_review_num_predict(text)
+    if should_enable_review_thinking(model_name):
+        return (
+            {
+                "num_predict": max(1024, min(3072, base_num_predict * 2)),
+                "think": True,
+            },
+            {
+                "num_predict": max(1024, min(2048, base_num_predict + 512)),
+                "think": False,
+            },
+        )
+
+    return (
+        {
+            "num_predict": base_num_predict,
+            "think": False,
+        },
+    )
+
+
 def review_transcript(
     raw_transcript: str,
     first_pass_result: StageResult,
@@ -573,25 +668,31 @@ def review_transcript(
 
     for index, (raw_chunk, cleaned_chunk) in enumerate(zip(raw_chunks, cleaned_chunks), start=1):
         print(f"Review [{index}/{len(cleaned_chunks)}] with {model_name} ...", file=sys.stderr)
-        messages = build_review_messages(raw_chunk, cleaned_chunk, language)
-        response = ollama_chat(
-            ollama_url=ollama_url,
-            model_name=model_name,
-            messages=messages,
-            timeout_seconds=timeout_seconds,
-            num_predict=estimate_review_num_predict(cleaned_chunk),
-            temperature=0.0,
-            think=False,
-        )
-        message = response.get("message")
+        messages = build_review_messages(raw_chunk, cleaned_chunk, language, model_name)
         reviewed_text = ""
-        if isinstance(message, dict):
-            reviewed_text = sanitize_cleanup_response(str(message.get("content", "")))
+        last_response: dict | None = None
+        for request_settings in review_request_settings(model_name, cleaned_chunk):
+            last_response = ollama_chat(
+                ollama_url=ollama_url,
+                model_name=model_name,
+                messages=messages,
+                timeout_seconds=timeout_seconds,
+                num_predict=int(request_settings["num_predict"]),
+                temperature=0.0,
+                think=bool(request_settings["think"]),
+            )
+            message = last_response.get("message")
+            if isinstance(message, dict):
+                reviewed_text = sanitize_cleanup_response(str(message.get("content", "")))
+            if reviewed_text:
+                break
         if not reviewed_text:
+            done_reason = last_response.get("done_reason") if isinstance(last_response, dict) else None
             raise RuntimeError(
                 "Ollama review returned an empty response"
-                + (f" (done_reason={response.get('done_reason')})" if response.get("done_reason") else "")
+                + (f" (done_reason={done_reason})" if done_reason else "")
             )
+        reviewed_text = apply_project_review_normalizations(reviewed_text, language, model_name)
         reviewed_chunks.append(reviewed_text)
 
     return StageResult(

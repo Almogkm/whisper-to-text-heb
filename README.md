@@ -33,7 +33,7 @@ The intended runtime is:
 - `openai-whisper` installed with `pip`
 - local Ollama running on `http://127.0.0.1:11434`
 - DICTA cleanup model installed in Ollama
-- at least one review model installed in Ollama; the default is `qwen36-reader-16k`
+- at least one review model installed in Ollama; the default is `qwen36-whisper-reviewer-16k`
 - UTF-8 Markdown output with Hebrew defaults
 
 ## Setup
@@ -50,6 +50,12 @@ Install the default Hebrew cleanup model in Ollama:
 
 ```bash
 ollama create dicta-hebrew-cleaner -f ollama/DictaHebrewCleaner.Modelfile
+```
+
+Install the default project-specific review model in Ollama:
+
+```bash
+ollama create qwen36-whisper-reviewer-16k -f ollama/Qwen36WhisperReviewer16k.Modelfile
 ```
 
 That local alias points at the official DICTA GGUF model:
@@ -81,10 +87,10 @@ Transcribe a directory recursively into a separate output directory:
 python transcribe_to_md.py /path/to/audio-dir --recursive --output-dir /path/to/transcripts
 ```
 
-Use a larger model for better Hebrew accuracy:
+Use a smaller Whisper model only when you need to trade accuracy for speed:
 
 ```bash
-python transcribe_to_md.py /path/to/audio.ogg --model medium
+python transcribe_to_md.py /path/to/audio.ogg --model small
 ```
 
 Skip the Ollama cleanup layer:
@@ -102,10 +108,10 @@ python transcribe_to_md.py /path/to/audio.ogg --skip-review
 ## Common options
 
 - `--language he` keeps Hebrew transcription as Hebrew
-- `--model small` is the default balance between speed and quality on CPU
-- `--model medium` usually improves Hebrew accuracy, but is slower
+- `--model medium` is the default balance for this project
+- `--model small` is faster, but usually worse on Hebrew
 - `--cleanup-model dicta-hebrew-cleaner` overrides the local cleanup model
-- `--review-model qwen36-reader-16k` overrides the second-pass review model
+- `--review-model qwen36-whisper-reviewer-16k` overrides the second-pass review model
 - `--overwrite` allows replacing existing `.md` files
 - `--prompt "..."` lets you provide Hebrew context words or names
 
@@ -134,11 +140,24 @@ Each output file contains:
 - intermediate DICTA transcript when the second pass succeeds
 - raw Whisper transcript for reference
 
+## Review Benchmark
+
+The repo includes a small judged benchmark for the second-pass reviewer:
+
+```bash
+conda run -n whisper python benchmarks/review_model_benchmark.py \
+  --output-dir benchmarks/review-runs/manual \
+  qwen36-reader-16k qwen36-whisper-reviewer-16k
+```
+
+This keeps the raw Whisper and DICTA first-pass text fixed, then scores each review model by how many judged word-level corrections it recovers.
+The project-specific reviewer path also applies a narrow final Hebrew normalization pass for recurring ASR leftovers after the Qwen review step.
+
 ## Notes
 
 - The first run for a given model downloads model weights.
-- On this CPU-only machine, `small` is the safest default.
+- On this CPU-only machine, `medium` is slower than `small`, but it is now the default because it produces materially better Hebrew transcripts.
 - If `ffmpeg` is missing from the conda env, Whisper will fail to open audio files.
 - The default cleanup target is `dicta-hebrew-cleaner`, which points at the official DICTA 12B Hebrew GGUF model in Ollama.
 - If the DICTA model is not installed yet, the tool prints the exact `ollama create` command to run.
-- The default second-pass review target is `qwen36-reader-16k`, used as a reconciliation pass over the DICTA output and the raw Whisper transcript.
+- The default second-pass review target is `qwen36-whisper-reviewer-16k`, a repo-local Qwen alias tuned for Hebrew transcript reconciliation.
