@@ -1,0 +1,11 @@
+[1/1] Transcribing /home/almogked/Downloads/WhatsApp Ptt 2026-08-28 at 10.35.38.ogg ...
+
+  0%|          | 0/4839 [00:00<?, ?frames/s]
+ 31%|███▏      | 1520/4839 [00:05<00:12, 275.95frames/s]
+ 82%|████████▏ | 3950/4839 [00:12<00:02, 312.50frames/s]
+100%|██████████| 4839/4839 [00:17<00:00, 276.20frames/s]
+100%|██████████| 4839/4839 [00:17<00:00, 283.30frames/s]
+Cleanup [1/1] with dicta-hebrew-cleaner ...
+Review [1/1] with qwen36-reader-16k ...
+Wrote transcript files:
+/home/almogked/Projects/whisper/benchmarks/2026-09-03-medium-vs-large/medium_full/WhatsApp Ptt 2026-08-28 at 10.35.38.md

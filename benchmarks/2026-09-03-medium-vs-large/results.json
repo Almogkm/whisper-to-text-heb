@@ -1,0 +1,32 @@
+[
+  {
+    "label": "medium_skip",
+    "elapsed_seconds": 22.668,
+    "returncode": 0,
+    "output_dir": "/home/almogked/Projects/whisper/benchmarks/2026-09-03-medium-vs-large/medium_skip"
+  },
+  {
+    "label": "medium_full",
+    "elapsed_seconds": 95.421,
+    "returncode": 0,
+    "output_dir": "/home/almogked/Projects/whisper/benchmarks/2026-09-03-medium-vs-large/medium_full"
+  },
+  {
+    "label": "large_skip_cold",
+    "elapsed_seconds": 292.287,
+    "returncode": 0,
+    "output_dir": "/home/almogked/Projects/whisper/benchmarks/2026-09-03-medium-vs-large/large_skip_cold"
+  },
+  {
+    "label": "large_skip_warm",
+    "elapsed_seconds": 46.514,
+    "returncode": 0,
+    "output_dir": "/home/almogked/Projects/whisper/benchmarks/2026-09-03-medium-vs-large/large_skip_warm"
+  },
+  {
+    "label": "large_full",
+    "elapsed_seconds": 119.828,
+    "returncode": 0,
+    "output_dir": "/home/almogked/Projects/whisper/benchmarks/2026-09-03-medium-vs-large/large_full"
+  }
+]

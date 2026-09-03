@@ -1,0 +1,9 @@
+[1/1] Transcribing /home/almogked/Downloads/WhatsApp Ptt 2026-08-28 at 10.35.38.ogg ...
+
+  0%|          | 0/4839 [00:00<?, ?frames/s]
+ 31%|███▏      | 1520/4839 [00:06<00:13, 251.76frames/s]
+ 82%|████████▏ | 3950/4839 [00:14<00:03, 285.33frames/s]
+100%|██████████| 4839/4839 [00:18<00:00, 258.57frames/s]
+100%|██████████| 4839/4839 [00:18<00:00, 263.24frames/s]
+Wrote transcript files:
+/home/almogked/Projects/whisper/benchmarks/2026-09-03-medium-vs-large/medium_skip/WhatsApp Ptt 2026-08-28 at 10.35.38.md
