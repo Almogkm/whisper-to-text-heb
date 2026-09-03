@@ -1,0 +1,9 @@
+name: whisper
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - ffmpeg
+  - pip:
+      - openai-whisper

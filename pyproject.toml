@@ -1,0 +1,22 @@
+[project]
+name = "whisper-md-transcriber"
+version = "0.1.0"
+description = "Local Whisper-based audio-to-Markdown transcription with Hebrew-first defaults."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openai-whisper",
+]
+
+[project.scripts]
+whisper-md-transcriber = "whisper_md_transcriber.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
