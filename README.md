@@ -19,8 +19,8 @@ By default it:
 - assumes Hebrew input with `--language he`
 - writes UTF-8 Markdown
 - writes output into the project directory by default
-- runs a second cleanup pass through local Ollama
-- prefers a Hebrew-specific DICTA cleanup model instead of the earlier Qwen profile
+- runs a first cleanup pass through local Ollama with a Hebrew-specific DICTA model
+- runs a second reconciliation pass that reviews the DICTA output against the raw Whisper text
 - wraps the transcript in `<div dir="rtl">` for better right-to-left rendering
 
 ## Important environment note
@@ -33,6 +33,7 @@ The intended runtime is:
 - `openai-whisper` installed with `pip`
 - local Ollama running on `http://127.0.0.1:11434`
 - DICTA cleanup model installed in Ollama
+- at least one review model installed in Ollama; the default is `qwen36-reader-16k`
 - UTF-8 Markdown output with Hebrew defaults
 
 ## Setup
@@ -72,7 +73,7 @@ python transcribe_to_md.py /path/to/audio.ogg
 ```
 
 This writes `/home/almogked/Projects/whisper/<audio-stem>.md` unless you pass `--output-dir`.
-The output file includes both a cleaned transcript and the raw Whisper transcript.
+The output file includes the final reviewed transcript, the intermediate DICTA transcript, and the raw Whisper transcript.
 
 Transcribe a directory recursively into a separate output directory:
 
@@ -92,12 +93,19 @@ Skip the Ollama cleanup layer:
 python transcribe_to_md.py /path/to/audio.ogg --skip-cleanup
 ```
 
+Skip only the second review layer and keep the DICTA result as the final transcript:
+
+```bash
+python transcribe_to_md.py /path/to/audio.ogg --skip-review
+```
+
 ## Common options
 
 - `--language he` keeps Hebrew transcription as Hebrew
 - `--model small` is the default balance between speed and quality on CPU
 - `--model medium` usually improves Hebrew accuracy, but is slower
 - `--cleanup-model dicta-hebrew-cleaner` overrides the local cleanup model
+- `--review-model qwen36-reader-16k` overrides the second-pass review model
 - `--overwrite` allows replacing existing `.md` files
 - `--prompt "..."` lets you provide Hebrew context words or names
 
@@ -122,7 +130,8 @@ Each output file contains:
 - source filename
 - transcription timestamp
 - Whisper model and language
-- cleaned transcript when Ollama cleanup succeeds
+- final reviewed transcript when both Ollama passes succeed
+- intermediate DICTA transcript when the second pass succeeds
 - raw Whisper transcript for reference
 
 ## Notes
@@ -132,3 +141,4 @@ Each output file contains:
 - If `ffmpeg` is missing from the conda env, Whisper will fail to open audio files.
 - The default cleanup target is `dicta-hebrew-cleaner`, which points at the official DICTA 12B Hebrew GGUF model in Ollama.
 - If the DICTA model is not installed yet, the tool prints the exact `ollama create` command to run.
+- The default second-pass review target is `qwen36-reader-16k`, used as a reconciliation pass over the DICTA output and the raw Whisper transcript.

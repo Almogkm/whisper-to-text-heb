@@ -34,6 +34,12 @@ DEFAULT_CLEANUP_MODELS = [
 PREFERRED_CLEANUP_MODELS = [
     *DEFAULT_CLEANUP_MODELS,
 ]
+DEFAULT_REVIEW_MODEL = "qwen36-reader-16k"
+PREFERRED_REVIEW_MODELS = [
+    DEFAULT_REVIEW_MODEL,
+    "qwen36-thinker-16k",
+    "gpt-oss:20b",
+]
 
 
 @dataclass(frozen=True)
@@ -43,12 +49,13 @@ class AudioJob:
 
 
 @dataclass(frozen=True)
-class CleanupResult:
+class StageResult:
     text: str
     model_name: str
     chunk_count: int
     status: str
     error: str | None = None
+    chunks: tuple[str, ...] = ()
 
 
 def default_cache_dir() -> Path:
@@ -140,6 +147,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=300,
         help="Timeout for each Ollama cleanup request. Default: 300",
+    )
+    parser.add_argument(
+        "--skip-review",
+        action="store_true",
+        help="Skip the second reconciliation pass and keep the DICTA output as the final transcript.",
+    )
+    parser.add_argument(
+        "--review-model",
+        default=None,
+        help=(
+            "Ollama model to use for the second transcript review pass. "
+            f"Default: auto-select `{DEFAULT_REVIEW_MODEL}`."
+        ),
+    )
+    parser.add_argument(
+        "--review-max-chars",
+        type=int,
+        default=None,
+        help="Maximum transcript characters per review chunk. Default: reuse --cleanup-max-chars",
+    )
+    parser.add_argument(
+        "--review-timeout-seconds",
+        type=int,
+        default=None,
+        help="Timeout for each review request. Default: reuse --cleanup-timeout-seconds",
     )
     return parser.parse_args(argv)
 
@@ -257,6 +289,24 @@ def resolve_cleanup_model(requested_model: str | None, ollama_url: str, timeout_
     )
 
 
+def resolve_review_model(requested_model: str | None, ollama_url: str, timeout_seconds: int) -> str:
+    available_models = load_ollama_models(ollama_url, timeout_seconds)
+
+    if requested_model:
+        if requested_model in available_models or f"{requested_model}:latest" in available_models:
+            return requested_model
+        raise RuntimeError(f"Requested review model is not installed in Ollama: {requested_model}")
+
+    for candidate in PREFERRED_REVIEW_MODELS:
+        if candidate in available_models or f"{candidate}:latest" in available_models:
+            return candidate
+
+    raise RuntimeError(
+        "No supported local review model found. Expected one of: "
+        + ", ".join(PREFERRED_REVIEW_MODELS)
+    )
+
+
 def split_cleanup_text(text: str, max_chars: int) -> list[str]:
     compact_text = " ".join(text.split())
     if not compact_text:
@@ -344,6 +394,58 @@ def build_cleanup_messages(text: str, language: str) -> list[dict[str, str]]:
     ]
 
 
+def build_review_messages(raw_text: str, cleaned_text: str, language: str) -> list[dict[str, str]]:
+    if language.lower() == "he":
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "אתה מבצע מעבר שני על תמלול בעברית אחרי ניקוי ראשוני.\n"
+                    "יש לפניך שני מקורות: תמלול גולמי של Whisper, ותמלול שעבר ניקוי ראשון.\n"
+                    "המטרה שלך היא להחזיר גרסה סופית טובה יותר מהניקוי הראשון.\n"
+                    "כללים:\n"
+                    "- עבוד בעיקר מתוך התמליל שעבר ניקוי ראשון.\n"
+                    "- כשיש צירוף מילים לא טבעי או לא הגיוני, בדוק מול התמליל הגולמי ונסה לשחזר את המילה הסבירה ביותר.\n"
+                    "- תקן שגיאות זיהוי קוליות של מילים דומות בצליל, במיוחד במסמכים, שמות, מדינות, קשרי משפחה ומילים יומיומיות.\n"
+                    "- שמור את כל המידע המקורי.\n"
+                    "- אל תענה לדובר, אל תמשיך את השיחה, אל תסכם, אל תתרגם, אל תוסיף עובדות חדשות ואל תשמיט מידע.\n"
+                    "- אם אינך בטוח, העדף תיקון שמרני שנשאר קרוב לגרסת הניקוי הראשון.\n"
+                    "- החזר רק את התמליל הסופי, בלי כותרות ובלי הסברים."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"תמלול גולמי:\n{raw_text}\n\n"
+                    f"תמלול אחרי ניקוי ראשון:\n{cleaned_text}"
+                ),
+            },
+        ]
+
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are performing a second pass over a speech transcript after an initial cleanup.\n"
+                "You are given a raw Whisper transcript and a first-pass cleaned transcript.\n"
+                "Return a final version that is better than the first-pass result.\n"
+                "Work mainly from the cleaned transcript, but use the raw transcript to fix phrases that still sound implausible.\n"
+                "Correct likely speech-recognition mistakes, keep all original information, and do not answer the speaker.\n"
+                "Do not summarize, translate, add facts, or omit content.\n"
+                "If uncertain, prefer a conservative edit close to the first-pass transcript.\n"
+                "Return only the final corrected transcript, with no heading and no explanation."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Raw transcript:\n{raw_text}\n\n"
+                f"First-pass cleaned transcript:\n{cleaned_text}"
+            ),
+        },
+    ]
+
+
 def ollama_chat(
     *,
     ollama_url: str,
@@ -351,6 +453,8 @@ def ollama_chat(
     messages: list[dict[str, str]],
     timeout_seconds: int,
     num_predict: int,
+    temperature: float,
+    think: bool | None = None,
 ) -> dict:
     payload = {
         "model": model_name,
@@ -358,9 +462,11 @@ def ollama_chat(
         "stream": False,
         "options": {
             "num_predict": num_predict,
-            "temperature": 0.1,
+            "temperature": temperature,
         },
     }
+    if think is not None:
+        payload["think"] = think
     request = Request(
         f"{ollama_url.rstrip('/')}/api/chat",
         data=json.dumps(payload).encode("utf-8"),
@@ -386,9 +492,9 @@ def cleanup_transcript(
     ollama_url: str,
     timeout_seconds: int,
     max_chars: int,
-) -> CleanupResult:
+) -> StageResult:
     if not transcript_text.strip():
-        return CleanupResult(
+        return StageResult(
             text=transcript_text,
             model_name="",
             chunk_count=0,
@@ -408,6 +514,8 @@ def cleanup_transcript(
             messages=messages,
             timeout_seconds=timeout_seconds,
             num_predict=2048,
+            temperature=0.1,
+            think=False,
         )
         message = response.get("message")
         cleaned_text = ""
@@ -420,11 +528,78 @@ def cleanup_transcript(
             )
         cleaned_chunks.append(cleaned_text)
 
-    return CleanupResult(
+    return StageResult(
         text="\n\n".join(cleaned_chunks).strip(),
         model_name=model_name,
         chunk_count=len(chunks),
         status="applied",
+        chunks=tuple(cleaned_chunks),
+    )
+
+
+def estimate_review_num_predict(text: str) -> int:
+    compact_text = " ".join(text.split())
+    estimated = len(compact_text) // 4 + 128
+    return max(256, min(1024, estimated))
+
+
+def review_transcript(
+    raw_transcript: str,
+    first_pass_result: StageResult,
+    *,
+    language: str,
+    requested_model: str | None,
+    ollama_url: str,
+    timeout_seconds: int,
+    max_chars: int,
+) -> StageResult:
+    if not first_pass_result.text.strip():
+        return StageResult(
+            text=first_pass_result.text,
+            model_name="",
+            chunk_count=0,
+            status="skipped-empty",
+        )
+
+    model_name = resolve_review_model(requested_model, ollama_url, timeout_seconds)
+    raw_chunks = split_cleanup_text(raw_transcript, max_chars=max_chars)
+    cleaned_chunks = list(first_pass_result.chunks) or split_cleanup_text(first_pass_result.text, max_chars=max_chars)
+
+    if len(raw_chunks) != len(cleaned_chunks):
+        raw_chunks = [raw_transcript]
+        cleaned_chunks = [first_pass_result.text]
+
+    reviewed_chunks: list[str] = []
+
+    for index, (raw_chunk, cleaned_chunk) in enumerate(zip(raw_chunks, cleaned_chunks), start=1):
+        print(f"Review [{index}/{len(cleaned_chunks)}] with {model_name} ...", file=sys.stderr)
+        messages = build_review_messages(raw_chunk, cleaned_chunk, language)
+        response = ollama_chat(
+            ollama_url=ollama_url,
+            model_name=model_name,
+            messages=messages,
+            timeout_seconds=timeout_seconds,
+            num_predict=estimate_review_num_predict(cleaned_chunk),
+            temperature=0.0,
+            think=False,
+        )
+        message = response.get("message")
+        reviewed_text = ""
+        if isinstance(message, dict):
+            reviewed_text = sanitize_cleanup_response(str(message.get("content", "")))
+        if not reviewed_text:
+            raise RuntimeError(
+                "Ollama review returned an empty response"
+                + (f" (done_reason={response.get('done_reason')})" if response.get("done_reason") else "")
+            )
+        reviewed_chunks.append(reviewed_text)
+
+    return StageResult(
+        text="\n\n".join(reviewed_chunks).strip(),
+        model_name=model_name,
+        chunk_count=len(reviewed_chunks),
+        status="applied",
+        chunks=tuple(reviewed_chunks),
     )
 
 
@@ -435,12 +610,13 @@ def rtl_markdown_block(text: str) -> str:
 def render_markdown(
     source: Path,
     raw_transcript: str,
-    cleaned_transcript: str,
+    final_transcript: str,
     *,
     model_name: str,
     language: str,
     generated_at: str,
-    cleanup_result: CleanupResult,
+    cleanup_result: StageResult,
+    review_result: StageResult,
 ) -> str:
     lines = [
         f"# תמלול: {source.name}",
@@ -454,19 +630,55 @@ def render_markdown(
     if cleanup_result.status == "applied":
         lines.extend(
             [
-                f"- מודל ניקוי: `{cleanup_result.model_name}`",
-                f"- ניקוי טקסט: `applied`",
-                f"- מספר מקטעי ניקוי: `{cleanup_result.chunk_count}`",
-                "",
-                "## תמליל משופר",
-                "",
-                rtl_markdown_block(cleaned_transcript),
-                "",
-                "## תמליל גולמי (Whisper)",
-                "",
-                rtl_markdown_block(raw_transcript),
+                f"- מודל ניקוי ראשון: `{cleanup_result.model_name}`",
+                f"- ניקוי ראשון: `{cleanup_result.status}`",
+                f"- מספר מקטעי ניקוי ראשון: `{cleanup_result.chunk_count}`",
             ]
         )
+
+        if review_result.status == "applied":
+            lines.extend(
+                [
+                    f"- מודל שיפור שני: `{review_result.model_name}`",
+                    f"- שיפור שני: `{review_result.status}`",
+                    f"- מספר מקטעי שיפור שני: `{review_result.chunk_count}`",
+                    "",
+                    "## תמליל סופי",
+                    "",
+                    rtl_markdown_block(final_transcript),
+                    "",
+                    "## תמליל אחרי שכבת DICTA",
+                    "",
+                    rtl_markdown_block(cleanup_result.text),
+                    "",
+                    "## תמליל גולמי (Whisper)",
+                    "",
+                    rtl_markdown_block(raw_transcript),
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    f"- שיפור שני: `{review_result.status}`",
+                    "",
+                    "## תמליל משופר",
+                    "",
+                    rtl_markdown_block(final_transcript),
+                    "",
+                    "## תמליל גולמי (Whisper)",
+                    "",
+                    rtl_markdown_block(raw_transcript),
+                ]
+            )
+            if review_result.error:
+                lines.extend(
+                    [
+                        "",
+                        "## הערת שיפור שני",
+                        "",
+                        review_result.error,
+                    ]
+                )
     else:
         lines.extend(
             [
@@ -508,9 +720,13 @@ def transcribe_job(
     prompt: str | None,
     cleanup_enabled: bool,
     cleanup_model: str | None,
+    review_enabled: bool,
+    review_model: str | None,
     ollama_url: str,
     cleanup_timeout_seconds: int,
     cleanup_max_chars: int,
+    review_timeout_seconds: int,
+    review_max_chars: int,
 ) -> Path:
     destination = destination_for(job, output_dir)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -528,13 +744,19 @@ def transcribe_job(
         verbose=False,
     )
     transcript_text = result.get("text", "").strip()
-    cleanup_result = CleanupResult(
+    cleanup_result = StageResult(
         text=transcript_text,
         model_name="",
         chunk_count=0,
         status="skipped",
     )
-    cleaned_transcript = transcript_text
+    review_result = StageResult(
+        text="",
+        model_name="",
+        chunk_count=0,
+        status="skipped",
+    )
+    final_transcript = transcript_text
 
     if cleanup_enabled and transcript_text:
         try:
@@ -546,9 +768,9 @@ def transcribe_job(
                 timeout_seconds=cleanup_timeout_seconds,
                 max_chars=cleanup_max_chars,
             )
-            cleaned_transcript = cleanup_result.text
+            final_transcript = cleanup_result.text
         except Exception as exc:
-            cleanup_result = CleanupResult(
+            cleanup_result = StageResult(
                 text=transcript_text,
                 model_name=cleanup_model or "",
                 chunk_count=0,
@@ -557,15 +779,39 @@ def transcribe_job(
             )
             print(f"Cleanup failed for {job.source}: {exc}", file=sys.stderr)
 
+    if cleanup_result.status == "applied" and review_enabled and cleanup_result.text.strip():
+        try:
+            review_result = review_transcript(
+                transcript_text,
+                cleanup_result,
+                language=language,
+                requested_model=review_model,
+                ollama_url=ollama_url,
+                timeout_seconds=review_timeout_seconds,
+                max_chars=review_max_chars,
+            )
+            final_transcript = review_result.text
+        except Exception as exc:
+            review_result = StageResult(
+                text=cleanup_result.text,
+                model_name=review_model or "",
+                chunk_count=0,
+                status="failed",
+                error=str(exc),
+            )
+            final_transcript = cleanup_result.text
+            print(f"Second-pass review failed for {job.source}: {exc}", file=sys.stderr)
+
     generated_at = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
     markdown = render_markdown(
         job.source,
         transcript_text,
-        cleaned_transcript,
+        final_transcript,
         model_name=model_name,
         language=language,
         generated_at=generated_at,
         cleanup_result=cleanup_result,
+        review_result=review_result,
     )
     destination.write_text(markdown, encoding="utf-8")
     return destination
@@ -603,9 +849,13 @@ def main(argv: list[str] | None = None) -> int:
                     prompt=args.prompt,
                     cleanup_enabled=not args.skip_cleanup,
                     cleanup_model=args.cleanup_model,
+                    review_enabled=not args.skip_review,
+                    review_model=args.review_model,
                     ollama_url=args.ollama_url,
                     cleanup_timeout_seconds=args.cleanup_timeout_seconds,
                     cleanup_max_chars=args.cleanup_max_chars,
+                    review_timeout_seconds=args.review_timeout_seconds or args.cleanup_timeout_seconds,
+                    review_max_chars=args.review_max_chars or args.cleanup_max_chars,
                 )
             )
         except Exception as exc:
