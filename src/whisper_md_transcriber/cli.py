@@ -25,12 +25,14 @@ SUPPORTED_EXTENSIONS = {
 }
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
+DEFAULT_CLEANUP_MODEL = "dicta-hebrew-cleaner"
+DEFAULT_CLEANUP_MODEL_SOURCE = "hf.co/dicta-il/DictaLM-3.0-Nemotron-12B-Instruct-GGUF:Q4_K_M"
+DEFAULT_CLEANUP_MODELS = [
+    DEFAULT_CLEANUP_MODEL,
+    DEFAULT_CLEANUP_MODEL_SOURCE,
+]
 PREFERRED_CLEANUP_MODELS = [
-    "qwen36-reader-16k",
-    "qwen36-reader-32k",
-    "qwen36-reader-64k",
-    "qwen36-16k",
-    "qwen-coder-16k",
+    *DEFAULT_CLEANUP_MODELS,
 ]
 
 
@@ -117,7 +119,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--cleanup-model",
         default=None,
-        help="Ollama model to use for transcript cleanup. Default: auto-select a local reader profile.",
+        help=(
+            "Ollama model to use for transcript cleanup. "
+            f"Default: auto-select `{DEFAULT_CLEANUP_MODEL}` or its official Hugging Face source model."
+        ),
     )
     parser.add_argument(
         "--ollama-url",
@@ -244,8 +249,11 @@ def resolve_cleanup_model(requested_model: str | None, ollama_url: str, timeout_
             return candidate
 
     raise RuntimeError(
-        "No supported local cleanup model found. Expected one of: "
-        + ", ".join(PREFERRED_CLEANUP_MODELS)
+        "No supported local DICTA cleanup model found. "
+        f"Install the default model with:\n"
+        f"  ollama create {DEFAULT_CLEANUP_MODEL} -f {PROJECT_DIR / 'ollama' / 'DictaHebrewCleaner.Modelfile'}\n"
+        "Or install the upstream model directly with:\n"
+        f"  ollama run {DEFAULT_CLEANUP_MODEL_SOURCE}"
     )
 
 
@@ -277,49 +285,84 @@ def split_cleanup_text(text: str, max_chars: int) -> list[str]:
     return chunks
 
 
-def build_cleanup_prompt(text: str, language: str) -> str:
-    if language.lower() == "he":
-        return (
-            "אתה עורך תמלולים בעברית.\n"
-            "תקן שגיאות כתיב, טעויות זיהוי ברורות, ניסוח וסימני פיסוק כדי שהטקסט יהיה קריא והגיוני יותר.\n"
-            "אל תסכם, אל תתרגם, אל תוסיף עובדות חדשות, ואל תשמיט מידע.\n"
-            "אם משהו אינו ברור, השאר אותו קרוב ככל האפשר למקור.\n"
-            "החזר רק את הטקסט המתוקן, בלי כותרות ובלי הסברים.\n\n"
-            "תמלול גולמי:\n"
-            f"{text}"
-        )
-
-    return (
-        "You are editing a speech transcript.\n"
-        "Fix spelling, obvious recognition mistakes, phrasing, and punctuation so the text reads naturally.\n"
-        "Do not summarize, translate, add facts, or omit content.\n"
-        "If a fragment is unclear, keep it close to the source.\n"
-        "Return only the corrected transcript text, with no heading and no explanation.\n\n"
-        "Raw transcript:\n"
-        f"{text}"
+def sanitize_cleanup_response(text: str) -> str:
+    cleaned = (
+        text.replace("<|im_start|>", "\n")
+        .replace("<|im_end|>", "\n")
+        .replace("<|endoftext|>", "\n")
     )
+    filtered_lines: list[str] = []
+    for line in cleaned.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped in {"assistant", "user", "system"}:
+            continue
+        filtered_lines.append(stripped)
+    return "\n".join(filtered_lines).strip()
 
 
-def ollama_generate(
+def build_cleanup_messages(text: str, language: str) -> list[dict[str, str]]:
+    if language.lower() == "he":
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "אתה עורך תמלולים של הודעות קוליות בעברית.\n"
+                    "המטרה שלך היא להפוך תמלול גולמי לטקסט עברי ברור, טבעי ונאמן למקור.\n"
+                    "כללים:\n"
+                    "- תקן שגיאות כתיב, הטיות, רווחים, פיסוק וטעויות זיהוי ברורות.\n"
+                    "- שמור את כל המידע המקורי.\n"
+                    "- אל תסכם, אל תתרגם, אל תוסיף עובדות חדשות ואל תשמיט מידע.\n"
+                    "- אל תהפוך את הטקסט לרשמי מדי; זה עדיין תמלול דיבור.\n"
+                    "- אם קטע אינו ברור, בחר ניסוח שמרני שקרוב ככל האפשר למקור.\n"
+                    "- החזר רק את התמליל המתוקן, בלי כותרות ובלי הסברים."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"תמלול גולמי:\n{text}",
+            },
+        ]
+
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are editing a speech transcript.\n"
+                "Fix spelling, obvious recognition mistakes, phrasing, spacing, and punctuation.\n"
+                "Keep all original information.\n"
+                "Do not summarize, translate, add facts, or omit content.\n"
+                "If a fragment is unclear, keep it conservative and close to the source.\n"
+                "Return only the corrected transcript text, with no heading and no explanation."
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"Raw transcript:\n{text}",
+        },
+    ]
+
+
+def ollama_chat(
     *,
     ollama_url: str,
     model_name: str,
-    prompt: str,
+    messages: list[dict[str, str]],
     timeout_seconds: int,
     num_predict: int,
 ) -> dict:
     payload = {
         "model": model_name,
-        "prompt": prompt,
+        "messages": messages,
         "stream": False,
-        "think": False,
         "options": {
             "num_predict": num_predict,
             "temperature": 0.1,
         },
     }
     request = Request(
-        f"{ollama_url.rstrip('/')}/api/generate",
+        f"{ollama_url.rstrip('/')}/api/chat",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -358,15 +401,18 @@ def cleanup_transcript(
 
     for index, chunk in enumerate(chunks, start=1):
         print(f"Cleanup [{index}/{len(chunks)}] with {model_name} ...", file=sys.stderr)
-        prompt = build_cleanup_prompt(chunk, language)
-        response = ollama_generate(
+        messages = build_cleanup_messages(chunk, language)
+        response = ollama_chat(
             ollama_url=ollama_url,
             model_name=model_name,
-            prompt=prompt,
+            messages=messages,
             timeout_seconds=timeout_seconds,
             num_predict=2048,
         )
-        cleaned_text = str(response.get("response", "")).strip()
+        message = response.get("message")
+        cleaned_text = ""
+        if isinstance(message, dict):
+            cleaned_text = sanitize_cleanup_response(str(message.get("content", "")))
         if not cleaned_text:
             raise RuntimeError(
                 "Ollama cleanup returned an empty response"

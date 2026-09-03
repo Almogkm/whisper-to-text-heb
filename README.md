@@ -20,6 +20,7 @@ By default it:
 - writes UTF-8 Markdown
 - writes output into the project directory by default
 - runs a second cleanup pass through local Ollama
+- prefers a Hebrew-specific DICTA cleanup model instead of the earlier Qwen profile
 - wraps the transcript in `<div dir="rtl">` for better right-to-left rendering
 
 ## Important environment note
@@ -31,6 +32,7 @@ The intended runtime is:
 - conda environment for Python and `ffmpeg`
 - `openai-whisper` installed with `pip`
 - local Ollama running on `http://127.0.0.1:11434`
+- DICTA cleanup model installed in Ollama
 - UTF-8 Markdown output with Hebrew defaults
 
 ## Setup
@@ -41,6 +43,18 @@ From this directory:
 conda env update -n whisper -f environment.yml
 conda activate whisper
 pip install openai-whisper
+```
+
+Install the default Hebrew cleanup model in Ollama:
+
+```bash
+ollama create dicta-hebrew-cleaner -f ollama/DictaHebrewCleaner.Modelfile
+```
+
+That local alias points at the official DICTA GGUF model:
+
+```text
+hf.co/dicta-il/DictaLM-3.0-Nemotron-12B-Instruct-GGUF:Q4_K_M
 ```
 
 Optional but useful on Ubuntu for better Hebrew rendering in GUI apps:
@@ -83,7 +97,7 @@ python transcribe_to_md.py /path/to/audio.ogg --skip-cleanup
 - `--language he` keeps Hebrew transcription as Hebrew
 - `--model small` is the default balance between speed and quality on CPU
 - `--model medium` usually improves Hebrew accuracy, but is slower
-- `--cleanup-model qwen36-reader-16k` overrides the local cleanup model
+- `--cleanup-model dicta-hebrew-cleaner` overrides the local cleanup model
 - `--overwrite` allows replacing existing `.md` files
 - `--prompt "..."` lets you provide Hebrew context words or names
 
@@ -116,4 +130,5 @@ Each output file contains:
 - The first run for a given model downloads model weights.
 - On this CPU-only machine, `small` is the safest default.
 - If `ffmpeg` is missing from the conda env, Whisper will fail to open audio files.
-- The default cleanup target is `qwen36-reader-16k`. On September 3, 2026, `qwen36-reader-32k` was installed locally but failed on this machine with `model requires more system memory (24.9 GiB) than is available (22.0 GiB)`.
+- The default cleanup target is `dicta-hebrew-cleaner`, which points at the official DICTA 12B Hebrew GGUF model in Ollama.
+- If the DICTA model is not installed yet, the tool prints the exact `ollama create` command to run.
