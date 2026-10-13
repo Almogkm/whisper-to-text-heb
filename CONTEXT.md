@@ -35,3 +35,19 @@ _Avoid_: translator, summarizer
 **Review model**:
 A second local language model that works from the first-pass transcript and the raw transcript together to repair mistakes the cleanup model missed.
 _Avoid_: responder, chat bot
+
+**Speaker turn**:
+A contiguous stretch of words attributed to one speaker, built from diarization plus word timestamps; the unit every LLM stage edits.
+_Avoid_: segment, utterance, line
+
+**Glossary**:
+Names, places, and terms supplied by someone who knows the recording, collected through the Hebrew questionnaire and fed to Whisper hotwords and both LLM stages.
+_Avoid_: dictionary, vocabulary list
+
+**Alternative reading**:
+The transcript from a second ASR model, aligned to the primary speaker turns by time and shown to the review model as extra evidence.
+_Avoid_: backup transcript, second transcript
+
+**Flagged turn**:
+A speaker turn marked ⚠️ in the transcript and listed under "קטעים לבדיקה" because its evidence is weak (low confidence, model disagreement, a heavy review edit, or a failed LLM stage), so a person should listen to it.
+_Avoid_: error, warning, low-quality segment

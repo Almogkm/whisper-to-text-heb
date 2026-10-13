@@ -11,6 +11,8 @@ Read these files in order:
 5. [NEXT-STEPS.md](./NEXT-STEPS.md) for the most valuable follow-on work
 6. [APP-SHARING.md](./APP-SHARING.md) for turning the local tool into a shareable app
 7. [WHATSAPP-BOT.md](./WHATSAPP-BOT.md) for turning the local tool into a WhatsApp voice-note bot
+8. [LONG-FORM.md](./LONG-FORM.md) for long recordings with speaker attribution
+9. [LONG-FORM-STATUS.md](./LONG-FORM-STATUS.md) for the current state of the long-form branch and what is left
 
 ## What this project does
 

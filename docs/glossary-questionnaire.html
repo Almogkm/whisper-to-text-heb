@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>שאלון מילון לתמלול</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --text: #1d1d1b;
+  --muted: #5f5e58;
+  --border: #dcdad2;
+  --accent: #2f5d8a;
+  --accent-text: #ffffff;
+  --accent-soft: #e6eef6;
+  --danger: #a33a2a;
+  --ok: #2e6b3f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161615;
+    --surface: #212120;
+    --text: #ecebe6;
+    --muted: #a8a69e;
+    --border: #3a3936;
+    --accent: #8db7e0;
+    --accent-text: #10202f;
+    --accent-soft: #1f2d3a;
+    --danger: #e58b7c;
+    --ok: #86c79a;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161615;
+  --surface: #212120;
+  --text: #ecebe6;
+  --muted: #a8a69e;
+  --border: #3a3936;
+  --accent: #8db7e0;
+  --accent-text: #10202f;
+  --accent-soft: #1f2d3a;
+  --danger: #e58b7c;
+  --ok: #86c79a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Noto Sans Hebrew", "Segoe UI", Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+}
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 96px; }
+h1 { font-size: 1.7rem; margin: 0 0 8px; }
+h2 { font-size: 1.2rem; margin: 0 0 4px; }
+p { margin: 0 0 12px; }
+.lead { color: var(--muted); }
+.tips {
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin: 20px 0 28px;
+}
+.tips ul { margin: 6px 0 0; padding-inline-start: 20px; }
+section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 18px;
+}
+.hint { color: var(--muted); font-size: 0.93rem; margin-bottom: 14px; }
+label { display: block; font-weight: 500; margin: 12px 0 4px; }
+input[type="text"], textarea, select {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+textarea { min-height: 76px; resize: vertical; }
+input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr auto;
+  gap: 8px;
+  align-items: start;
+  margin-bottom: 8px;
+}
+.row.speaker { grid-template-columns: 1fr 0.7fr 1.4fr auto; }
+.row-head {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr auto;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin-bottom: 4px;
+}
+.row-head.speaker { grid-template-columns: 1fr 0.7fr 1.4fr auto; }
+.row-head span:last-child { width: 40px; }
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 14px;
+}
+button:hover { border-color: var(--accent); }
+button.remove { width: 40px; padding: 8px 0; color: var(--danger); }
+button.add { margin-top: 6px; color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 700; }
+.actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding: 14px 0;
+}
+#status { color: var(--ok); font-size: 0.93rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (max-width: 600px) {
+  .row, .row.speaker, .row-head, .row-head.speaker { grid-template-columns: 1fr auto; }
+  .row > :nth-child(2), .row.speaker > :nth-child(3) { grid-column: 1 / 2; }
+  .row.speaker > :nth-child(2) { grid-column: 1 / 2; }
+  .row-head { display: none; }
+}
+@media print {
+  .actions, button.add, button.remove { display: none; }
+  section { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>שאלון לפני תמלול הקלטה</h1>
+  <p class="lead">התשובות שלך יעזרו לתוכנת התמלול לכתוב נכון שמות, מקומות ומילים מיוחדות שמופיעים בהקלטה.</p>
+
+  <div class="tips">
+    <strong>כמה דברים חשובים:</strong>
+    <ul>
+      <li>אין תשובות נכונות או לא נכונות. מלאו רק את מה שאתם יודעים, ואפשר לדלג על כל שאלה.</li>
+      <li>הכי חשוב: לכתוב כל שם בדיוק כמו שהוא צריך להופיע בתמליל, באיות הנכון.</li>
+      <li>גם כינויים ושמות חיבה חשובים, למשל "סבתא רחלי" או "מוטי".</li>
+      <li>אין צורך לשמור באמצע: מה שכתבתם נשמר אוטומטית בדפדפן הזה. בסוף לוחצים על "שמירת קובץ" ושולחים את הקובץ.</li>
+    </ul>
+  </div>
+
+  <section>
+    <h2>1. על ההקלטה</h2>
+    <p class="hint">משפט או שניים מספיקים.</p>
+    <label for="topic">על מה מדברים בהקלטה?</label>
+    <textarea id="topic" data-field="recording.topic" placeholder="למשל: סבא מספר על העלייה לארץ ועל השנים הראשונות בקיבוץ"></textarea>
+    <label for="setting">איפה ומתי זה הוקלט, ובאיזה מצב?</label>
+    <textarea id="setting" data-field="recording.setting" placeholder="למשל: ראיון בבית, ליד שולחן המטבח, 2024. יש רעשי רקע של טלוויזיה"></textarea>
+    <label for="background">עוד רקע שיכול לעזור (תקופה, מקצוע, תחביבים, אירועים שמוזכרים)</label>
+    <textarea id="background" data-field="recording.background" placeholder="למשל: עבד 30 שנה כמהנדס בחברת חשמל. מזכירים את מלחמת יום כיפור"></textarea>
+  </section>
+
+  <section>
+    <h2>2. מי מדבר בהקלטה?</h2>
+    <p class="hint">כל מי שקולו נשמע בהקלטה. המין עוזר לכתוב נכון פעלים ותארים ("אמרתי לך" / "אמרת לי").</p>
+    <div class="row-head speaker"><span>שם</span><span>מין</span><span>מי זה ואיך הוא מדבר (קשר, גיל, מבטא)</span><span></span></div>
+    <div id="speakers"></div>
+    <button type="button" class="add" data-add="speakers">+ הוספת דובר</button>
+  </section>
+
+  <section>
+    <h2>3. אנשים שמוזכרים בשיחה</h2>
+    <p class="hint">בני משפחה, חברים, שכנים, רופאים, מורים, אנשים מפורסמים. כל מי שהשם שלו עשוי להישמע.</p>
+    <div class="row-head"><span>שם, בדיוק כמו שצריך להיכתב</span><span>מי זה (למשל: אחות של סבתא, הרופא של אמא)</span><span></span></div>
+    <div id="people"></div>
+    <button type="button" class="add" data-add="people">+ הוספת אדם</button>
+  </section>
+
+  <section>
+    <h2>4. מקומות</h2>
+    <p class="hint">ערים, יישובים, קיבוצים, שכונות, רחובות, ארצות, וגם מקומות בחו"ל.</p>
+    <div class="row-head"><span>שם המקום</span><span>הערה (לא חובה)</span><span></span></div>
+    <div id="places"></div>
+    <button type="button" class="add" data-add="places">+ הוספת מקום</button>
+  </section>
+
+  <section>
+    <h2>5. ארגונים ומוסדות</h2>
+    <p class="hint">מקומות עבודה, בתי ספר, בתי חולים, יחידות בצבא, משרדים ממשלתיים, חברות, מפלגות.</p>
+    <div class="row-head"><span>שם</span><span>הערה (לא חובה)</span><span></span></div>
+    <div id="organizations"></div>
+    <button type="button" class="add" data-add="organizations">+ הוספת ארגון</button>
+  </section>
+
+  <section>
+    <h2>6. מילים מיוחדות</h2>
+    <p class="hint">מונחים מקצועיים, ראשי תיבות, סלנג, שמות של תרופות, מכשירים או מסמכים, ביטויים שרק במשפחה משתמשים בהם.</p>
+    <div class="row-head"><span>המילה</span><span>מה היא אומרת</span><span></span></div>
+    <div id="terms"></div>
+    <button type="button" class="add" data-add="terms">+ הוספת מילה</button>
+  </section>
+
+  <section>
+    <h2>7. מילים משפות אחרות</h2>
+    <p class="hint">מילים באנגלית, ערבית, רוסית, יידיש, צרפתית או כל שפה אחרת שמשתלבות בדיבור. כתבו איך הן צריכות להופיע בתמליל, באותיות עבריות או לועזיות.</p>
+    <div class="row-head"><span>המילה כמו שתיכתב</span><span>שפה ומשמעות</span><span></span></div>
+    <div id="foreign"></div>
+    <button type="button" class="add" data-add="foreign">+ הוספת מילה</button>
+  </section>
+
+  <section>
+    <h2>8. משהו נוסף?</h2>
+    <p class="hint">כל דבר אחר שכדאי לדעת: מילה שקל לטעות בה, שם שנשמע כמו מילה רגילה, שני אנשים עם אותו שם.</p>
+    <div class="row-head"><span>מילה או שם</span><span>הערה</span><span></span></div>
+    <div id="other"></div>
+    <button type="button" class="add" data-add="other">+ הוספה</button>
+  </section>
+
+  <div class="actions">
+    <button type="button" class="primary" id="save">שמירת קובץ (glossary.json)</button>
+    <button type="button" id="load">טעינת קובץ קיים</button>
+    <button type="button" id="print">הדפסה</button>
+    <button type="button" id="clear">ניקוי הטופס</button>
+    <span id="status" role="status"></span>
+    <input type="file" id="file" accept=".json,application/json" class="visually-hidden">
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "whisper-glossary-questionnaire-v1";
+  var LIST_KEYS = ["people", "places", "organizations", "terms", "foreign", "other"];
+  var NOTE_PLACEHOLDERS = {
+    people: "מי זה",
+    places: "הערה",
+    organizations: "הערה",
+    terms: "משמעות",
+    foreign: "שפה ומשמעות",
+    other: "הערה"
+  };
+  var TERM_PLACEHOLDERS = {
+    people: "שם",
+    places: "מקום",
+    organizations: "ארגון",
+    terms: "מילה",
+    foreign: "מילה",
+    other: "מילה או שם"
+  };
+
+  function el(tag, attrs) {
+    var node = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (key) { node.setAttribute(key, attrs[key]); });
+    return node;
+  }
+
+  function removeButton(row) {
+    var button = el("button", { type: "button", "class": "remove", "aria-label": "מחיקת שורה" });
+    button.textContent = "✕";
+    button.addEventListener("click", function () { row.remove(); persist(); });
+    return button;
+  }
+
+  function addSpeaker(data) {
+    data = data || {};
+    var row = el("div", { "class": "row speaker" });
+    var name = el("input", { type: "text", "data-key": "name", placeholder: "שם", "aria-label": "שם הדובר" });
+    var gender = el("select", { "data-key": "gender", "aria-label": "מין" });
+    [["", "—"], ["female", "אישה"], ["male", "גבר"], ["other", "אחר"]].forEach(function (pair) {
+      var option = el("option", { value: pair[0] });
+      option.textContent = pair[1];
+      gender.appendChild(option);
+    });
+    var description = el("input", { type: "text", "data-key": "description", placeholder: "למשל: הסבא, בן 85, מבטא רומני", "aria-label": "תיאור הדובר" });
+    name.value = data.name || "";
+    gender.value = data.gender || "";
+    description.value = data.description || "";
+    row.append(name, gender, description, removeButton(row));
+    document.getElementById("speakers").appendChild(row);
+    return row;
+  }
+
+  function addEntry(listKey, data) {
+    data = data || {};
+    var row = el("div", { "class": "row" });
+    var term = el("input", { type: "text", "data-key": "term", placeholder: TERM_PLACEHOLDERS[listKey], "aria-label": TERM_PLACEHOLDERS[listKey] });
+    var note = el("input", { type: "text", "data-key": "note", placeholder: NOTE_PLACEHOLDERS[listKey], "aria-label": NOTE_PLACEHOLDERS[listKey] });
+    term.value = data.term || "";
+    note.value = data.note || "";
+    row.append(term, note, removeButton(row));
+    document.getElementById(listKey).appendChild(row);
+    return row;
+  }
+
+  function readRows(containerId, keys) {
+    var rows = document.getElementById(containerId).querySelectorAll(".row");
+    var items = [];
+    rows.forEach(function (row) {
+      var item = {};
+      keys.forEach(function (key) { item[key] = row.querySelector('[data-key="' + key + '"]').value.trim(); });
+      if (item[keys[0]]) items.push(item);
+    });
+    return items;
+  }
+
+  function collect() {
+    var data = {
+      version: 1,
+      recording: {
+        topic: document.getElementById("topic").value.trim(),
+        setting: document.getElementById("setting").value.trim(),
+        background: document.getElementById("background").value.trim()
+      },
+      speakers: readRows("speakers", ["name", "gender", "description"])
+    };
+    LIST_KEYS.forEach(function (key) { data[key] = readRows(key, ["term", "note"]); });
+    return data;
+  }
+
+  function fill(data) {
+    data = data || {};
+    var recording = data.recording || {};
+    document.getElementById("topic").value = recording.topic || "";
+    document.getElementById("setting").value = recording.setting || "";
+    document.getElementById("background").value = recording.background || "";
+
+    document.getElementById("speakers").innerHTML = "";
+    var speakers = data.speakers && data.speakers.length ? data.speakers : [{}, {}];
+    speakers.forEach(addSpeaker);
+
+    LIST_KEYS.forEach(function (key) {
+      document.getElementById(key).innerHTML = "";
+      var items = data[key] && data[key].length ? data[key] : [{}, {}, {}];
+      items.forEach(function (item) { addEntry(key, item); });
+    });
+  }
+
+  function persist() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(collect())); } catch (e) { /* storage unavailable */ }
+  }
+
+  function restore() {
+    try {
+      var saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function setStatus(text) {
+    var status = document.getElementById("status");
+    status.textContent = text;
+    window.clearTimeout(setStatus.timer);
+    setStatus.timer = window.setTimeout(function () { status.textContent = ""; }, 4000);
+  }
+
+  document.querySelectorAll("[data-add]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var key = button.getAttribute("data-add");
+      var row = key === "speakers" ? addSpeaker() : addEntry(key);
+      row.querySelector("input").focus();
+    });
+  });
+
+  document.addEventListener("input", persist);
+  document.addEventListener("change", persist);
+
+  document.getElementById("save").addEventListener("click", function () {
+    var blob = new Blob([JSON.stringify(collect(), null, 2)], { type: "application/json" });
+    var link = el("a", { href: URL.createObjectURL(blob), download: "glossary.json" });
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setStatus("הקובץ נשמר. שלחו את glossary.json למי שמתמלל.");
+  });
+
+  document.getElementById("load").addEventListener("click", function () {
+    document.getElementById("file").click();
+  });
+
+  document.getElementById("file").addEventListener("change", function (event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    file.text().then(function (text) {
+      fill(JSON.parse(text));
+      persist();
+      setStatus("הקובץ נטען.");
+    }).catch(function () {
+      setStatus("לא הצלחתי לקרוא את הקובץ.");
+    });
+    event.target.value = "";
+  });
+
+  document.getElementById("print").addEventListener("click", function () { window.print(); });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    if (!window.confirm("למחוק את כל מה שמולא בטופס?")) return;
+    fill({});
+    persist();
+  });
+
+  fill(restore());
+})();
+</script>
+</body>
+</html>

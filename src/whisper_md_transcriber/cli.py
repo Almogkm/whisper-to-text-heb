@@ -528,6 +528,7 @@ def ollama_chat(
     num_predict: int,
     temperature: float,
     think: bool | None = None,
+    num_ctx: int | None = None,
 ) -> dict:
     payload = {
         "model": model_name,
@@ -538,6 +539,8 @@ def ollama_chat(
             "temperature": temperature,
         },
     }
+    if num_ctx is not None:
+        payload["options"]["num_ctx"] = num_ctx
     if think is not None:
         payload["think"] = think
     request = Request(

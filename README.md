@@ -105,6 +105,19 @@ Skip only the second review layer and keep the DICTA result as the final transcr
 python transcribe_to_md.py /path/to/audio.ogg --skip-review
 ```
 
+## Long recordings with speakers
+
+For long Hebrew recordings (interviews, conversations) with speaker attribution, use the long-form pipeline:
+
+```bash
+conda run -n whisper python transcribe_long.py /path/to/recording.m4a --glossary glossary.json
+```
+
+It runs two faster-whisper large-v3 passes (ivrit.ai Hebrew fine-tune + vanilla), pyannote diarization, then DICTA cleanup and Qwen review per speaker turn, and writes `<stem>.speakers.md`, `.srt` and `.json`.
+Every stage is checkpointed under `work/<stem>/`, so an interrupted run resumes where it stopped.
+The glossary comes from the Hebrew questionnaire at `docs/glossary-questionnaire.html`.
+See [docs/takeoff/LONG-FORM.md](docs/takeoff/LONG-FORM.md) for the full runbook.
+
 ## Common options
 
 - `--language he` keeps Hebrew transcription as Hebrew
