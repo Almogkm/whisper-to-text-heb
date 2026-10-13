@@ -10,6 +10,7 @@ Read these files in order:
 4. [QUALITY-AND-BENCHMARKS.md](./QUALITY-AND-BENCHMARKS.md) for accuracy history and performance numbers
 5. [NEXT-STEPS.md](./NEXT-STEPS.md) for the most valuable follow-on work
 6. [APP-SHARING.md](./APP-SHARING.md) for turning the local tool into a shareable app
+7. [WHATSAPP-BOT.md](./WHATSAPP-BOT.md) for turning the local tool into a WhatsApp voice-note bot
 
 ## What this project does
 
