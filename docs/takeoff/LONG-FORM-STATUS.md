@@ -2,7 +2,7 @@
 
 Living status doc for the long-form work: what is done and what is left. Update it in place instead of writing a new dated handoff. The glossary lives in [CONTEXT.md](../../CONTEXT.md), the runbook in [LONG-FORM.md](./LONG-FORM.md).
 
-Last updated: 2026-10-13. Branch: `feat/diarized-long-form` (created from `main` at `f270f18`), committed and pushed to `origin`.
+Last updated: 2026-10-15. Branch: `feat/diarized-long-form` (created from `main` at `f270f18`), committed and pushed to `origin`.
 
 ## Goal
 
@@ -53,6 +53,7 @@ A different 48 s voice note, same synthetic setup (speaker changes at 12, 24 and
 2. Words snapping to 0.02 s diarization slivers → speaker chosen by time overlap, slivers < 0.15 s ignored.
 3. LLM checkpoints reused after the turns changed → keyed to a fingerprint of the turn contents.
 4. DICTA sometimes merges turns and renumbers them → per-turn guards (length 0.5–1.8×, ≤ 60% word change); only the rejected turns are retried one by one.
+5. ASR-disagreement flags inflated on the first real batch (6 recordings, 2026-10-15): `word_change_ratio` compared raw tokens, so punctuation and the U+202B direction marks ivrit sometimes emits counted as different words, and those marks leaked into the output → comparison ignores punctuation and direction controls; render strips the controls. Flagged turns fell from 676 to 357 of 1315; transcript text unchanged.
 
 ## Left to do
 

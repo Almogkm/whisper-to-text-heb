@@ -111,6 +111,26 @@ class WordChangeRatioTest(unittest.TestCase):
     def test_disjoint_is_one(self):
         self.assertEqual(lf.word_change_ratio("a b", "c d"), 1.0)
 
+    def test_punctuation_is_ignored(self):
+        self.assertEqual(lf.word_change_ratio("ונשארתי שם שנה. הילד, בא", "ונשארתי שם שנה הילד בא"), 0.0)
+
+    def test_bidi_controls_are_ignored(self):
+        self.assertEqual(lf.word_change_ratio("‫ובאנו לארץ.‬", "ובאנו לארץ"), 0.0)
+
+    def test_punctuation_only_tokens_are_dropped(self):
+        self.assertEqual(lf.word_change_ratio("טוב - טוב", "טוב טוב"), 0.0)
+
+    def test_real_word_change_still_counts(self):
+        self.assertGreater(lf.word_change_ratio("הילד היה בן שנה.", "הילד הימן שנה"), 0.0)
+
+
+class StripBidiTest(unittest.TestCase):
+    def test_removes_direction_controls(self):
+        self.assertEqual(lf.strip_bidi("‫שלום‬ ‏עולם‎"), "שלום עולם")
+
+    def test_keeps_plain_text(self):
+        self.assertEqual(lf.strip_bidi('צה"ל, 85 שנים.'), 'צה"ל, 85 שנים.')
+
 
 class BlocksOfTest(unittest.TestCase):
     def test_packs_until_limit(self):
@@ -170,6 +190,10 @@ class ComputeFlagsTest(unittest.TestCase):
 
     def test_asr_disagreement(self):
         self.assertEqual(len(lf.compute_flags(self.base_turn(alt="c d"))), 1)
+
+    def test_punctuation_and_bidi_are_not_disagreement(self):
+        turn = self.base_turn(raw="‫a, b.", alt="a b")
+        self.assertEqual(lf.compute_flags(turn), [])
 
     def test_failed_stage(self):
         self.assertEqual(len(lf.compute_flags(self.base_turn(review_status="kept-source"))), 1)

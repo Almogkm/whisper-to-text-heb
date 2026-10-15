@@ -80,6 +80,8 @@ GLOSSARY_CATEGORY_LABELS = {
 GENDER_LABELS = {"female": "אישה", "male": "גבר"}
 
 TURN_MARKER = re.compile(r"^\s*<<\s*(\d+)\s*(?:\|[^>]*)?>>\s*(.*)$")
+BIDI_CONTROLS = re.compile("[‎‏‪-‮⁦-⁩]")
+PUNCTUATION = re.compile(r"[^\w\s]")
 
 
 # ---------------------------------------------------------------------------
@@ -516,10 +518,21 @@ def attach_alternative(turns: list[dict], alt_words: list[dict], key: str) -> No
         turn[key] = " ".join("".join(collected).split())
 
 
+def strip_bidi(text: str) -> str:
+    """Drop invisible direction controls (LRM/RLM, embeddings) that ivrit sometimes emits."""
+    return BIDI_CONTROLS.sub("", text)
+
+
+def comparable_words(text: str) -> list[str]:
+    return PUNCTUATION.sub("", strip_bidi(text)).split()
+
+
 def word_change_ratio(before: str, after: str) -> float:
-    if not before.strip() and not after.strip():
+    """Share of words that differ, ignoring punctuation and direction controls."""
+    before_words, after_words = comparable_words(before), comparable_words(after)
+    if not before_words and not after_words:
         return 0.0
-    return 1.0 - SequenceMatcher(None, before.split(), after.split()).ratio()
+    return 1.0 - SequenceMatcher(None, before_words, after_words).ratio()
 
 
 # ---------------------------------------------------------------------------
@@ -1050,6 +1063,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # render
     for turn in turns:
+        for key in ("raw", "alt", "cleaned", "final"):
+            if isinstance(turn.get(key), str):
+                turn[key] = strip_bidi(turn[key])
+        turn["words"] = [strip_bidi(word) for word in turn["words"]]
         turn["flags"] = compute_flags(turn)
 
     output_dir = args.output_dir.expanduser().resolve()
